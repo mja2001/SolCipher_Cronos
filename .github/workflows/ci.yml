@@ -1,0 +1,173 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-contracts:
+    name: Test Smart Contracts
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Compile contracts
+      run: npx hardhat compile
+      
+    - name: Run contract tests
+      run: npm run test:contracts
+      
+    - name: Generate coverage report
+      run: npm run test:coverage
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/coverage-final.json
+        flags: contracts
+
+  test-agent:
+    name: Test AI Agent
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        
+    - name: Install Python dependencies
+      run: |
+        cd agent
+        pip install -r requirements.txt
+        
+    - name: Run agent tests
+      run: |
+        cd agent
+        pytest tests/ -v --cov=. --cov-report=xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./agent/coverage.xml
+        flags: agent
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Check formatting
+      run: npx prettier --check "**/*.{ts,js,json,md}"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Slither (Solidity Security)
+      uses: crytic/slither-action@v0.3.0
+      with:
+        target: 'contracts/'
+        slither-args: '--exclude-dependencies'
+      continue-on-error: true
+      
+    - name: Run npm audit
+      run: npm audit --audit-level=moderate
+      continue-on-error: true
+
+  build:
+    name: Build Project
+    runs-on: ubuntu-latest
+    needs: [test-contracts, test-agent, lint]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build project
+      run: npm run build
+      
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          artifacts/
+          typechain-types/
+          dist/
+
+  deploy-testnet:
+    name: Deploy to Testnet
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Deploy to Cronos Testnet
+      env:
+        PRIVATE_KEY: ${{ secrets.TESTNET_PRIVATE_KEY }}
+        CRONOS_RPC_URL: ${{ secrets.CRONOS_RPC_URL }}
+      run: npm run deploy:testnet
+      
+    - name: Save deployment info
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-testnet
+        path: deployments/
