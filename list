@@ -1,0 +1,20 @@
+agent/
+├── main.py                    # AI agent entry point
+├── risk_analyzer.py          # Risk assessment logic
+├── encryption_manager.py     # Encryption orchestration
+└── decision_engine.py        # Autonomous decisions
+
+contracts/
+├── PaymentProcessor.sol      # x402 payment integration
+└── ZKVerifier.sol           # Zero-knowledge proofs
+
+scripts/
+├── deploy.ts                 # Deployment script
+└── verify.ts                 # Contract verification
+
+tests/
+├── SolCipherCore.test.ts    # Contract tests
+└── agent.test.py            # Agent tests
+
+frontend/                     # Demo web app
+└── (React/Next.js app)
